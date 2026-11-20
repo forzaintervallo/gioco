@@ -107,3 +107,8 @@ body.isdebug.menu #dbgb{display:block}
 #credit:active{opacity:1;transform:scale(.95)}body.menu #credit{display:flex}
 
 #ticker[hidden]{display:none!important}
+
+/* ---- v8: classifica oltre i 100, soglia minima, "carica altri" ---- */
+.minbox{width:100%;max-width:420px;padding:9px 14px;border-radius:12px;background:#422006;border:2px solid #facc15;color:#fde68a;font-size:14px;font-weight:700;line-height:1.35;flex:none}.minbox b{color:#facc15;font-size:16px}
+#lb li.more{background:none;padding:6px 0 12px;margin:0;justify-content:center}#lb li.more button{min-width:min(280px,80vw)}
+.omsg.ok{color:#86efac}

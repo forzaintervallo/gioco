@@ -1,4 +1,4 @@
-const C='ej-v16',F=['./','index.html','style.css','config.js','js/gen.js','js/game.js','js/sound.js','js/app.js','assets/logo.png','assets/icon-192.png','manifest.json'];
+const C='ej-v17',F=['./','index.html','style.css','config.js','js/gen.js','js/game.js','js/sound.js','js/app.js','assets/logo.png','assets/icon-192.png','manifest.json'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(F)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>clients.claim())));
 // rete prima (aggiornamenti immediati), cache come fallback offline; le API non vengono mai messe in cache

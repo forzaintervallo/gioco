@@ -1,6 +1,7 @@
 // UI, autenticazione e comunicazione con il backend.
 (()=>{
-const C=CONFIG,$=s=>document.querySelector(s),API=(CONFIG.API||'').replace(/\/$/,'');
+const C=CONFIG,$=s=>document.querySelector(s),API=(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'':(CONFIG.API||'')).replace(/\/$/,''); // aperto da localhost: usa il server locale (stessa origine), non il tunnel di config.js
+
 let tok=localStorage.tok||'',me=null,run=null,tilt=localStorage.tilt==='1',period='all';
 async function api(p,body){
   const r=await fetch(API+'/api/'+p,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(tok?{Authorization:'Bearer '+tok}:{})},body:body&&JSON.stringify(body)});
@@ -81,26 +82,38 @@ async function play(){
   m2=false;SFX.play('start');SFX.music(true,'music');
   game.start(run?run.seed:(Math.random()*2**31|0)+1)}
 async function over(score){
-  const rid=run&&run.id;run=null;SHD=null;SFX.music(false);SFX.free('music2');const later=(f,ms)=>setTimeout(()=>{if($('#over').classList.contains('on'))f()},ms);later(()=>SFX.play('gameover'),450);$('#os').textContent=score;$('#ob').textContent=me.best;$('#orank').textContent='…';$('#omsg').textContent='';
+  const rid=run&&run.id;run=null;SHD=null;SFX.music(false);SFX.free('music2');const later=(f,ms)=>setTimeout(()=>{if($('#over').classList.contains('on'))f()},ms);later(()=>SFX.play('gameover'),450);$('#os').textContent=score;$('#ob').textContent=me.best;$('#orank').textContent='…';$('#omsg').textContent='';$('#omsg').classList.remove('ok');
   for(const i of['#opg','#ogap','#osh'])$(i).classList.add('inv');show('over');$('#over').scrollTop=0;
   if(!rid){$('#orank').textContent='-';$('#omsg').textContent=DEBUG?'🛠 Debug: punteggio non salvato':'Offline: punteggio non salvato';return}
-  try{const r=await api('run/finish',{id:rid,score});me.best=r.best;me.avg=r.avg;$('#ob').textContent=r.best;$('#orank').textContent=r.rank?'#'+r.rank:'-';
+  try{const prevBest=me.best,r=await api('run/finish',{id:rid,score});me.best=r.best;setMin(r.min);me.avg=r.avg;$('#ob').textContent=r.best;$('#orank').textContent=r.rank?'#'+r.rank:'-';
     if(!r.accepted){$('#omsg').textContent='Punteggio non valido';return}
     if(r.grade==null){$('#omsg').textContent='Server non aggiornato: riavvia server.js dalla cartella nuova';return}
+    if(r.best<MIN)$('#omsg').textContent='🔒 Per entrare in classifica servono '+num(MIN)+' punti: ti mancano '+num(MIN-r.best)+'.';
+    else if(prevBest<MIN){$('#omsg').textContent='🎉 Sei entrato in classifica!';$('#omsg').classList.add('ok')}
         if(r.newRecord)SFX.play('record');if(r.prevAvg==null||r.avg>r.prevAvg)later(()=>SFX.play('gradeup'),1400);else if(r.avg<r.prevAvg)later(()=>SFX.play('gradedown'),1400);
     $('#opg').classList.remove('inv');gauge($('#og'),r.avg,true,'',r.prevAvg==null?1:r.prevAvg); // voto del PROFILO aggiornato, animato dal valore precedente
     $('#ogap').textContent=(r.newRecord?'🎉 Nuovo record! ':'')+gapMsg(r,score);$('#ogap').classList.remove('inv');
     SHD=r;$('#osh').classList.remove('inv')}
   catch(e){$('#orank').textContent='-';$('#omsg').textContent=net(e)}}
-async function board(){
-  const ul=$('#lb'),q=$('#q').value.trim();ul.replaceChildren(el('li','','Carico…'));
-  try{const rows=await api(q?'search?q='+encodeURIComponent(q):'leaderboard?period='+period);ul.replaceChildren();
+// Classifica: 100 righe la prima volta, poi +50 per volta col pulsante. MIN = record minimo per comparire (arriva dal server, config.js è solo il valore iniziale).
+const PG1=100,PG2=50;let bOff=0,bSeq=0,MIN=C.MIN_BOARD||300;
+const setMin=n=>{if(n>0){MIN=n;document.querySelectorAll('.minv').forEach(e=>e.textContent=num(n))}};setMin(MIN);
+async function board(more){
+  const ul=$('#lb'),q=$('#q').value.trim(),id=++bSeq;
+  if(more){const b=ul.querySelector('.more button');if(b){b.disabled=true;b.textContent='Carico…'}}
+  else{bOff=0;ul.replaceChildren(el('li','','Carico…'));ul.scrollTop=0}
+  try{const j=await api(q?'search?q='+encodeURIComponent(q):'leaderboard?period='+period+'&offset='+bOff+'&limit='+(bOff?PG2:PG1));if(id!==bSeq)return;
+    const rows=Array.isArray(j)?j:j.rows;if(j.min)setMin(j.min);
+    if(more){const m=ul.querySelector('.more');if(m)m.remove()}else ul.replaceChildren();
     for(const r of rows){const li=el('li',r.nick===me.nick?'me':'');const gc=el('i','gc',fmt(r.grade));gc.style.background=r.grade?gcol(r.grade):'#334155';li.append(el('b','','#'+(r.rank||'-')),el('span','',r.nick),gc,el('b','',r.score));ul.append(li)}
-    if(!rows.length)ul.append(el('li','','Nessun risultato'))}
-  catch(e){ul.replaceChildren(el('li','',net(e)))}}
+    bOff+=rows.length;
+    if(!rows.length&&!more)ul.append(el('li','',q?'Nessun risultato (in classifica solo da '+num(MIN)+' punti)':'Ancora nessuno in classifica: servono almeno '+num(MIN)+' punti per entrare'));
+    if(!q&&j.more){const li=el('li','more'),b=el('button','sec small','Carica altri '+PG2);b.onclick=()=>board(true);li.append(b);ul.append(li)}}
+  catch(e){if(id!==bSeq)return;
+    const b=more&&ul.querySelector('.more button');if(b){b.disabled=false;b.textContent='Riprova ('+net(e)+')'}else ul.replaceChildren(el('li','',net(e)))}}
 async function profile(){
-  try{await loadMe();$('#pn').textContent=me.nick;const ul=$('#pst');ul.replaceChildren();
-    for(const[k,v]of[['Record',me.best],['Voto medio',fmt(me.avg)],['Miglior voto',fmt(me.bestGrade)],['Ultimo voto',fmt(me.lastGrade)],['Ultimo punteggio',me.lastScore==null?'-':me.lastScore],['Partite giocate',me.games],['Posizione globale',me.rank?'#'+me.rank:'-'],['Iscritto dal',new Date(me.since).toLocaleDateString('it')]]){const li=el('li','');li.append(el('span','',k),el('b','',v));ul.append(li)}
+  try{await loadMe();setMin(me.min);$('#pn').textContent=me.nick;const ul=$('#pst');ul.replaceChildren();
+    for(const[k,v]of[['Record',me.best],['Voto medio',fmt(me.avg)],['Miglior voto',fmt(me.bestGrade)],['Ultimo voto',fmt(me.lastGrade)],['Ultimo punteggio',me.lastScore==null?'-':me.lastScore],['Partite giocate',me.games],['Posizione globale',me.rank?'#'+me.rank:'Fuori classifica (min. '+num(MIN)+' punti)'],['Iscritto dal',new Date(me.since).toLocaleDateString('it')]]){const li=el('li','');li.append(el('span','',k),el('b','',v));ul.append(li)}
     show('prof')}catch(e){alert(net(e))}}
 document.querySelectorAll('[data-cfg]').forEach(e=>e.textContent=C[e.dataset.cfg]);
 const MSG=[`🗳️ VOTA ${C.LIST} · ${C.SLOGAN}`,`🏆 IL N°1 IN CLASSIFICA VINCE ${C.PRIZE.toUpperCase()}!`,'⚡ GIOCA, SALI, VINCI!'];
@@ -109,7 +122,7 @@ async function prize(){
   show('prize');$('#shirt').src=C.SHIRT;$('#lead').textContent='';
   const end=C.CONTEST_END?new Date(C.CONTEST_END):null,d=end?Math.ceil((end-Date.now())/864e5):0;
   $('#cend').textContent=!end?'Data di chiusura: sarà comunicata a breve.':d<=0?'Il contest è concluso!':'Il contest termina il '+end.toLocaleDateString('it')+' · mancano '+d+(d===1?' giorno':' giorni')+'!';
-  try{const[r]=await api('leaderboard?period=all');$('#lead').textContent=(r?'👑 In testa ora: '+r.nick+' ('+r.score+')':'👑 Nessuno in testa: puoi essere il primo!')+(me.rank?' · Tu: #'+me.rank:'')}catch{}}
+  try{const r=(await api('leaderboard?period=all&limit=1')).rows[0];$('#lead').textContent=(r?'👑 In testa ora: '+r.nick+' ('+r.score+')':'👑 Nessuno in testa: puoi essere il primo!')+(me.rank?' · Tu: #'+me.rank:'')}catch{}}
 $('#bpz').onclick=prize;$('#bpl2').onclick=play;$('#bb3').onclick=home;
 $('#bshare').onclick=async()=>{if(!SHD)return;SFX.play('share');const t=shareText(),u=SHARE_URL();
   if(navigator.share){try{await navigator.share({text:t,url:u});return}catch(e){if(e.name==='AbortError')return}}copyTxt(t+' '+u,$('#bshare'))};
@@ -119,7 +132,7 @@ $('#bli').onclick=()=>doAuth('login');$('#bre').onclick=()=>doAuth('register');
 $('#bplay').onclick=$('#bagain').onclick=play;$('#bhome').onclick=$('#bph').onclick=home;
 $('#pb').onclick=()=>game.pause();$('#bres').onclick=()=>{show('');game.resume();SFX.play('resume');SFX.resumeMusic(musicFor())};$('#bsnd').onclick=()=>{SFX.toggle();home()};
 $('#blb').onclick=()=>{$('#q').value='';show('board');board()};$('#bpr').onclick=profile;$('#bb1').onclick=$('#bb2').onclick=home;
-$('#q').oninput=(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(board,300)}})();
+$('#q').oninput=(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>board(),300)}})();
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{period=b.dataset.p;$('#q').value='';document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('ghost',x!==b));board()});
 $('#btilt').onclick=async()=>{if(!tilt&&typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
   try{if(await DeviceOrientationEvent.requestPermission()!=='granted')return}catch{return}}
