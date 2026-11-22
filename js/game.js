@@ -25,7 +25,7 @@
   const { PHYS, Gen, biomeAt } = window.EJ, W = PHYS.W, R = 15, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   class Game {
     constructor(cv, o) {
-      this.cv = cv; this.cx = cv.getContext('2d'); this.o = o; this.state = 'idle'; this.keys = {}; this.tx = null; this.tiltV = 0; this.last = null; this.t = 0; this.b0 = 0; this.f0 = 0;
+      this.cv = cv; this.cx = cv.getContext('2d'); this.o = o; this.state = 'idle'; this.keys = {}; this.tx = null; this.tiltV = 0; this.last = null; this.t = 0; this.b0 = 0; this.f0 = 0; this.acc = 0; this.recBuf = new Uint8Array(65536); this.recLen = 0; this.recN = 0; this.H0q = 0; this.recH = 0;
       this.p = { x: W / 2, y: 0, vx: 0, vy: 0, sq: 0, rot: 0 }; this.items = []; this.haz = []; this.cam = 0; this.top = 0; this.score = 0;
       this.parts = Array.from({ length: 64 }, () => ({ l: 0, x: 0, y: 0, vx: 0, vy: 0 }));
       this.clouds = Array.from({ length: 9 }, (_, i) => ({ x: (i * 131 + 40) % W, y: i * 173, s: .7 + (i % 3) * .3, k: .22 + (i % 3) * .1 }));
@@ -52,19 +52,20 @@
       document.addEventListener('visibilitychange', () => document.hidden && this.pause()); addEventListener('blur', () => this.pause());
       this.loop = t => {
         requestAnimationFrame(this.loop);
-        if (this.state === 'run') { const raw = this.last ? (t - this.last) / 1000 : 0, dt = Math.min(raw, .033); this.last = t;
+        if (this.state === 'run') { const raw = this.last ? (t - this.last) / 1000 : 0; this.last = t;
+          this.acc += Math.min(raw, .033); const ms = Math.min(33, Math.floor(this.acc * 1000 + 1e-6)), dt = ms / 1000; this.acc -= dt; // millisecondi interi (con resto riportato): stessa velocità media, ma la partita è riproducibile dal server
           if (raw > 0) { this.avg = this.avg * .97 + raw * .03; this.fxq = this.avg > .027 ? 0 : this.avg < .021 ? 1 : this.fxq } // telefono lento: effetti più leggeri
-          this.update(dt); this.draw() } else this.last = null
+          this.rec(ms); this.update(dt); this.draw() } else this.last = null
       };
       requestAnimationFrame(this.loop);
     }
     resize() {
       const d = Math.min(devicePixelRatio || 1, 2), w = Math.min(innerWidth, innerHeight * .62), h = innerHeight;
-      this.cw = w; this.H = W * h / w; this.cv.style.width = w + 'px'; this.cv.width = w * d; this.cv.height = h * d; this.k = w * d / W
+      this.cw = w; this.H = Math.round(W * h / w * 10) / 10; this.cv.style.width = w + 'px'; this.cv.width = w * d; this.cv.height = h * d; this.k = w * d / W
     }
     start(seed) {
       this.gen = new Gen(seed); this.items = [{ t: 'n', x: W / 2, bx: W / 2, y: 0, w: 90, amp: 0, ph: 0 }]; this.haz = []; this.pows = []; this.jet = 0; this.shield = 0; this.inv = 0; this.boost = 0; this.lab = ''; this.o.onPower && this.o.onPower('');
-      this.p = { x: W / 2, y: -30, vx: 0, vy: PHYS.jump, sq: 0, rot: 0 }; this.top = -30; this.cam = -this.H * .7; this.t = 0; this.score = 0; this.tx = null; this.bi = 0; this.shake = 0; this.mg = 0; this.nb = 0; this.mt = 1; for (const m of this.meteors) m.l = 0; this.state = 'run'; this.last = null; this.o.onScore(0)
+      this.p = { x: W / 2, y: -30, vx: 0, vy: PHYS.jump, sq: 0, rot: 0 }; this.top = -30; this.cam = -this.H * .7; this.t = 0; this.score = 0; this.tx = null; this.bi = 0; this.shake = 0; this.mg = 0; this.nb = 0; this.mt = 1; for (const m of this.meteors) m.l = 0; this.acc = 0; this.recLen = 0; this.recN = 0; this.H0q = Math.round(this.H * 10); this.recH = this.H0q; this.state = 'run'; this.last = null; this.o.onScore(0)
     }
     sfx(k) { this.o.sfx && this.o.sfx(k) }
     pause() { if (this.state === 'run') { this.state = 'pause'; this.o.onPause() } }
@@ -272,6 +273,23 @@
       }
       c.restore();
     }
+    // ---- traccia della partita: il server la rigioca con la stessa fisica e decide il punteggio (anticheat)
+    // per ogni fotogramma: [ms][flag: 1 sinistra, 2 destra, 4 tocco, 8 inclinazione, 16 cambio altezza schermo][int16 tocco*8 o inclinazione*1000][int16 altezza*10]
+    rec(ms) {
+      const k = this.keys, tc = this.tx != null, ti = this.o.tilt() ? 1 : 0, hq = Math.round(this.H * 10);
+      if (tc) this.tx = Math.round(this.tx * 8) / 8; // gli ingressi vengono arrotondati: il gioco usa gli stessi valori che finiscono nella traccia
+      if (ti) this.tiltV = Math.round(this.tiltV * 1000) / 1000;
+      const ctrl = ((k.ArrowLeft || k.KeyA) ? 1 : 0) | ((k.ArrowRight || k.KeyD) ? 2 : 0) | (tc ? 4 : 0) | (ti ? 8 : 0) | (hq !== this.recH ? 16 : 0);
+      if (this.recLen + 8 > this.recBuf.length) { const nb = new Uint8Array(this.recBuf.length * 2); nb.set(this.recBuf); this.recBuf = nb }
+      const b = this.recBuf, dv = new DataView(b.buffer); let i = this.recLen;
+      b[i++] = ms; b[i++] = ctrl;
+      if (tc || ti) { dv.setInt16(i, tc ? Math.round(this.tx * 8) : Math.round(this.tiltV * 1000), true); i += 2 }
+      if (ctrl & 16) { dv.setInt16(i, hq, true); i += 2; this.recH = hq }
+      this.recLen = i; this.recN++
+    }
+    getTrace() { // intestazione [versione][altezza iniziale*10][n. fotogrammi] + fotogrammi
+      const o = new Uint8Array(7 + this.recLen), dv = new DataView(o.buffer); o[0] = 1; dv.setUint16(1, this.H0q, true); dv.setUint32(3, this.recN, true); o.set(this.recBuf.subarray(0, this.recLen), 7); return o
+    }
     drawEnemy(h) {
       const c = this.cx, p = this.p, sp = this.spr.enemy; c.save(); c.translate(h.x, h.y);
       if (sp) { c.rotate(Math.sin(this.t * 2 + h.ph) * .2); c.drawImage(sp, -20, -20, 40, 40); c.restore(); return }
@@ -361,5 +379,5 @@
       c.lineWidth = 2; c.strokeStyle = '#1e3a8a'; c.beginPath(); c.arc(0, 0, R, 0, 6.3); c.stroke(); c.restore();
     }
   }
-  window.Game = Game;
+  window.Game = Game; Game.VER = 'r1'; // cambia questo valore se modifichi fisica o generazione (gen.js, game.js): il server rigioca le partite con la STESSA versione
 })();
