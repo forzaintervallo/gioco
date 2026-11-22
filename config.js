@@ -1,4 +1,4 @@
-window.CONFIG={API:"https://karl-ebony-columns-housing.trycloudflare.com",LOGO:"assets/logo.png",SHIRT:"assets/shirt.svg",
+window.CONFIG={API:"https://mask-online-motel-ambien.trycloudflare.com",LOGO:"assets/logo.png",SHIRT:"assets/shirt.svg",
  LIST:"LISTA 1",SLOGAN:"@FORZA INTERVALLO",SCHOOL:"MAX PLANCK",
  PRIZE:"una felpa del planck!",
  MIN_BOARD:300,                           // punti minimi (record) per comparire in classifica; il valore che conta è quello del server (MIN_BOARD), questo è solo il valore iniziale
