@@ -6,8 +6,9 @@
 <link rel="stylesheet" href="style.css"><title>Lista 1 - Forza Intervallo</title></head><body>
 <canvas id="cv"></canvas>
     <div id="bg" aria-hidden="true"></div>
-<div id="hud" class="hide"><div><span id="sc">0</span><br><small id="bs"></small><br><span id="pu"></span></div><div class="hb"><button id="pdbg" class="hide" aria-label="Zona successiva">⏫</button><button id="pb" aria-label="Pausa">❚❚</button></div></div>
+<div id="hud" class="hide"><div><span id="sc">0</span><br><small id="bs"></small><br><span id="pu"></span><span id="evh" class="evh"></span></div><div class="hb"><button id="pdbg" class="hide" aria-label="Zona successiva">⏫</button><button id="pb" aria-label="Pausa">❚❚</button></div></div>
 <div id="toast"></div>
+<div id="evb" role="status" aria-live="polite"><i>⚡</i><b>EVENTO PUNTI ATTIVO</b><em class="evx"></em><i>⚡</i></div>
     <a id="credit" target="_blank" rel="noopener" aria-label="Instagram dello sviluppatore"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg><span></span></a><button id="dbgb" class="small">🛠 DEBUG</button>
     <section class="screen" id="login"><img src="assets/logo.png" width="96" alt=""><h1 class="brand"><small data-cfg="SCHOOL"></small><span data-cfg="LIST"></span><em data-cfg="SLOGAN"></em></h1>
 <input id="nick" placeholder="Nickname" autocomplete="username" autocapitalize="off" maxlength="16">
@@ -16,11 +17,12 @@
 <p class="note">Nessuna email: se dimentichi il PIN non è possibile recuperare l'account.</p></section>
 <section class="screen" id="home"><img src="assets/logo.png" width="88" alt="" class="bounce"><h1 class="brand"><small data-cfg="SCHOOL"></small><span data-cfg="LIST"></span><em data-cfg="SLOGAN"></em></h1>
 <div class="hrow"><div class="rec"><small>🏆 RECORD</small><b id="hb">0</b></div><div class="rec"><small>VOTO MEDIO</small><div id="hg" class="g"></div></div></div>
-<button id="bplay" class="big">GIOCA</button><button id="bpz" class="hot">🎁 VINCI LA MAGLIETTA</button><button id="blb" class="sec">CLASSIFICA</button><button id="bpr" class="ghost">PROFILO</button><div class="row2"><button id="btilt" class="ghost small"></button><button id="bsnd" class="ghost small"></button></div></section>
+<div id="evp">⚡ PUNTI <b class="evx"></b> SU OGNI PARTITA ⚡</div><button id="bplay" class="big">GIOCA</button><button id="bpz" class="hot">🎁 VINCI LA MAGLIETTA</button><button id="blb" class="sec">CLASSIFICA</button><button id="bpr" class="ghost">PROFILO</button><div class="row2"><button id="btilt" class="ghost small"></button><button id="bsnd" class="ghost small"></button></div></section>
 <section class="screen" id="over"><div class="sp t"></div>
 <h1 class="go">GAME OVER</h1>
 <div class="hero"><div class="hc"><div class="hv"><span id="os" class="sc2">0</span></div><small class="lb gold">PUNTEGGIO</small></div>
 <div class="hc inv" id="opg"><div class="hv"><div id="og" class="g"></div></div><small class="lb">VOTO PROFILO</small></div></div>
+<p id="obon" class="obon"></p>
 <div class="chips"><span class="chip">🏆 Record <b id="ob">0</b></span><span class="chip">Posizione <b id="orank">-</b></span></div>
 <p id="omsg" class="omsg"></p><p id="ogap" class="say inv"></p>
 <div class="sp m"></div><div class="btns"><button id="bagain" class="big">RIGIOCA</button><button id="bhome" class="ghost">HOME</button></div>

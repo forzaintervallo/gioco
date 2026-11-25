@@ -6,7 +6,7 @@ async function api(p,body){
   const r=await fetch(API+'/api/'+p,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(tok?{Authorization:'Bearer '+tok}:{})},body:body&&JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.error||'Errore'),{status:r.status});return j}
 const net=e=>e.status?e.message:'Server non raggiungibile';
-const show=id=>{const tk=document.getElementById('ticker');if(tk)tk.hidden=!(id==='home'||id==='login'); // la striscia gialla è un elemento a sé: nascosta davvero (display:none) fuori da home e login
+const show=id=>{document.body.classList.toggle('inrun',id==='');const tk=document.getElementById('ticker');if(tk)tk.hidden=!(id==='home'||id==='login'); // la striscia gialla è un elemento a sé: nascosta davvero (display:none) fuori da home e login
   document.body.classList.toggle('menu',['login','home','prize','board','prof'].includes(id));document.querySelectorAll('.screen').forEach(e=>e.classList.toggle('on',e.id===id));$('#hud').classList.toggle('hide',!(id===''||id==='pause'))};
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;e.textContent=x;return e};
 // seconda musica: preload a (soglia-400) punti, dissolvenza incrociata di MUSIC_FADE secondi alla soglia (config.js: MUSIC2_AT, MUSIC_FADE)
@@ -70,6 +70,14 @@ addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('b
 addEventListener('pointermove',e=>{if(!pb)return;const t=document.elementFromPoint(e.clientX,e.clientY);pb.classList.toggle('pressed',!!t&&pb.contains(t))},{passive:true}); // dito spostato fuori = rilascia l'effetto
 for(const t of['pointerup','pointercancel','blur','contextmenu'])addEventListener(t,unp,{passive:true});
 document.addEventListener('visibilitychange',unp);addEventListener('touchstart',()=>{},{passive:true}); // abilita :active su iOS Safari
+// ---- Evento punti: stato pubblico del server. Niente SSE (i Quick Tunnel Cloudflare non lo supportano): polling leggero ogni 15-25 s, solo a pagina visibile, più lo stato restituito da run/start.
+let ev={on:false,mult:1},evInit=false,evT=0;
+function applyEv(e){const m=e&&e.on&&+e.mult>1?+e.mult:1,on=m>1;if(evInit&&on===ev.on&&m===ev.mult)return;const first=!evInit;evInit=true;ev={on,mult:m};
+  document.body.classList.toggle('ev',on);document.querySelectorAll('.evx').forEach(x=>x.textContent=on?'x'+m:'');
+  if(!first&&!document.body.classList.contains('inrun'))showToast(on?'⚡ EVENTO PUNTI ATTIVO x'+m+' ⚡':'Evento punti terminato')}
+const evPoll=async()=>{try{applyEv(await api('event'))}catch{}};
+(function evLoop(){clearTimeout(evT);evT=setTimeout(async()=>{if(!document.hidden)await evPoll();evLoop()},15000+Math.random()*10000)})();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)evPoll()});evPoll();
 function home(){game.stop();SFX.music(false);SFX.free('music2');gauge($('#hg'),me.avg,false);$('#bpr').textContent='👤 '+me.nick;$('#hb').textContent=me.best;$('#btilt').textContent=tilt?'📱 Inclinazione':'👆 Touch';$('#bsnd').textContent=SFX.isOn()?'🔊 Suoni on':'🔇 Suoni off';show('home')}
 async function loadMe(){try{me=await api('me')}catch(e){if(e.status===401){tok='';localStorage.removeItem('tok')}throw e}}
 async function doAuth(kind){$('#err').textContent='';
@@ -78,6 +86,7 @@ async function doAuth(kind){$('#err').textContent='';
 async function play(){
   show('');game.clear();$('#sc').textContent='0';$('#bs').textContent=DEBUG?'DEBUG · non salvato':'Record '+me.best;
   run=DEBUG?null:await Promise.race([api('run/start',{}).catch(()=>null),new Promise(r=>setTimeout(r,1500,null))]);
+  const rm=run&&run.mult>1?run.mult:1;if(run)applyEv({on:rm>1,mult:rm});$('#evh').textContent=rm>1?'⚡ x'+rm:''; // il badge in partita mostra il moltiplicatore fissato dal server all'avvio
   m2=false;SFX.play('start');SFX.music(true,'music');
   game.start(run?run.seed:(Math.random()*2**31|0)+1)}
 async function packTrace(){ // traccia compressa (gzip se disponibile) in base64
@@ -86,16 +95,16 @@ async function packTrace(){ // traccia compressa (gzip se disponibile) in base64
   let s='';for(let i=0;i<b.length;i+=8192)s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));
   return{tr:btoa(s),z,ver:Game.VER}}
 async function over(score){
-  const rid=run&&run.id;run=null;SHD=null;SFX.music(false);SFX.free('music2');const later=(f,ms)=>setTimeout(()=>{if($('#over').classList.contains('on'))f()},ms);later(()=>SFX.play('gameover'),450);$('#os').textContent=score;$('#ob').textContent=me.best;$('#orank').textContent='…';$('#omsg').textContent='';
+  const rid=run&&run.id;run=null;SHD=null;SFX.music(false);SFX.free('music2');const later=(f,ms)=>setTimeout(()=>{if($('#over').classList.contains('on'))f()},ms);later(()=>SFX.play('gameover'),450);$('#os').textContent=score;$('#ob').textContent=me.best;$('#orank').textContent='…';$('#omsg').textContent='';$('#obon').textContent='';
   for(const i of['#opg','#ogap','#osh'])$(i).classList.add('inv');show('over');$('#over').scrollTop=0;
   if(!rid){$('#orank').textContent='-';$('#omsg').textContent=DEBUG?'🛠 Debug: punteggio non salvato':'Offline: punteggio non salvato';return}
   try{const pk=await packTrace(),r=await api('run/finish',{id:rid,score,...pk});me.best=r.best;me.avg=r.avg;$('#ob').textContent=r.best;$('#orank').textContent=r.rank?'#'+r.rank:'-';
     if(!r.accepted){$('#omsg').textContent=r.reason==='old'?'Aggiorna l\'app: chiudila e riaprila, poi riprova':r.reason==='busy'?'Server occupato: riprova tra poco':'Punteggio non valido';return}
-    if(r.score!=null&&r.score!==score)$('#os').textContent=r.score; // vale il punteggio rigiocato dal server
+    if(r.score!=null&&r.score!==score)$('#os').textContent=r.score;if(r.mult>1&&r.bonus>0)$('#obon').textContent='⚡ '+num(r.raw)+' + '+num(r.bonus)+' bonus · x'+r.mult+' ⚡'; // vale il punteggio rigiocato dal server
     if(r.grade==null){$('#omsg').textContent='Server non aggiornato: riavvia server.js dalla cartella nuova';return}
         if(r.newRecord)SFX.play('record');if(r.prevAvg==null||r.avg>r.prevAvg)later(()=>SFX.play('gradeup'),1400);else if(r.avg<r.prevAvg)later(()=>SFX.play('gradedown'),1400);
     $('#opg').classList.remove('inv');gauge($('#og'),r.avg,true,'',r.prevAvg==null?1:r.prevAvg); // voto del PROFILO aggiornato, animato dal valore precedente
-    $('#ogap').textContent=(r.newRecord?'🎉 Nuovo record! ':'')+gapMsg(r,score);$('#ogap').classList.remove('inv');
+    $('#ogap').textContent=(r.newRecord?'🎉 Nuovo record! ':'')+gapMsg(r,r.score==null?score:r.score);$('#ogap').classList.remove('inv');
     SHD=r;$('#osh').classList.remove('inv')}
   catch(e){$('#orank').textContent='-';$('#omsg').textContent=net(e)}}
 let lbRows=0;
